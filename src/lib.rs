@@ -1,4 +1,4 @@
-use std::mem::replace;
+use std::mem::take;
 use std::time::Duration;
 
 pub use deadpool;
@@ -17,14 +17,15 @@ mod error;
 
 pub type Client = tiberius::Client<tokio_util::compat::Compat<tokio::net::TcpStream>>;
 pub type Pool = managed::Pool<Manager>;
+pub type TcpStreamModifier =
+    Box<dyn Fn(&tokio::net::TcpStream) -> tokio::io::Result<()> + Send + Sync + 'static>;
 
 pub struct Manager {
     config: tiberius::Config,
     pool_config: PoolConfig,
     runtime: Option<Runtime>,
     hooks: Hooks,
-    modify_tcp_stream:
-        Box<dyn Fn(&tokio::net::TcpStream) -> tokio::io::Result<()> + Send + Sync + 'static>,
+    modify_tcp_stream: TcpStreamModifier,
     #[cfg(feature = "sql-browser")]
     enable_sql_browser: bool,
 }
@@ -58,7 +59,7 @@ impl managed::Manager for Manager {
     async fn recycle(
         &self,
         conn: &mut Self::Type,
-        // _metrics: &Metrics,
+        _metrics: &Metrics,
     ) -> RecycleResult<Self::Error> {
         match conn.simple_query("").await {
             Ok(_) => Ok(()),
@@ -83,7 +84,7 @@ impl Manager {
     pub fn create_pool(mut self) -> Result<Pool, error::Error> {
         let config = self.pool_config;
         let runtime = self.runtime;
-        let hooks = replace(&mut self.hooks, Hooks::default());
+        let hooks = take(&mut self.hooks);
         let mut pool = Pool::builder(self).config(config);
         if let Some(v) = runtime {
             pool = pool.runtime(v);
@@ -241,18 +242,15 @@ impl Manager {
     }
 }
 
+impl Default for Manager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Default)]
 struct Hooks {
     pre_recycle: Vec<Hook<Manager>>,
     post_recycle: Vec<Hook<Manager>>,
     post_create: Vec<Hook<Manager>>,
-}
-
-impl Default for Hooks {
-    fn default() -> Self {
-        Hooks {
-            pre_recycle: Vec::<Hook<Manager>>::new(),
-            post_recycle: Vec::<Hook<Manager>>::new(),
-            post_create: Vec::<Hook<Manager>>::new(),
-        }
-    }
 }
