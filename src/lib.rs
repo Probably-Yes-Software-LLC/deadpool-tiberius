@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::mem::take;
 use std::time::Duration;
 
@@ -28,6 +29,19 @@ pub struct Manager {
     modify_tcp_stream: TcpStreamModifier,
     #[cfg(feature = "sql-browser")]
     enable_sql_browser: bool,
+}
+
+impl Debug for Manager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Manager")
+            .field("config", &self.config)
+            .field("pool_config", &self.pool_config)
+            .field("runtime", &self.runtime)
+            .field("hooks", &self.hooks)
+            .field("modify_tcp_stream", &())
+            .field("enable_sql_browser", &())
+            .finish()
+    }
 }
 
 #[async_trait]
@@ -248,7 +262,7 @@ impl Default for Manager {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct Hooks {
     pre_recycle: Vec<Hook<Manager>>,
     post_recycle: Vec<Hook<Manager>>,
